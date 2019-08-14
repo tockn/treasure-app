@@ -7,25 +7,26 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 
 	"github.com/voyagegroup/treasure-app/httputil"
 	"github.com/voyagegroup/treasure-app/model"
-	"github.com/voyagegroup/treasure-app/repository"
 	"github.com/voyagegroup/treasure-app/service"
 )
 
 type Article struct {
-	db *sqlx.DB
+	articleService service.Article
 }
 
-func NewArticle(db *sqlx.DB) *Article {
-	return &Article{db: db}
+func NewArticle(as service.Article) *Article {
+	return &Article{
+		articleService: as,
+	}
 }
 
 func (a *Article) Index(w http.ResponseWriter, r *http.Request) (int, interface{}, error) {
-	articles, err := repository.AllArticle(a.db)
+	ctx := r.Context()
+	articles, err := a.articleService.GetAll(ctx)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -33,6 +34,8 @@ func (a *Article) Index(w http.ResponseWriter, r *http.Request) (int, interface{
 }
 
 func (a *Article) Show(w http.ResponseWriter, r *http.Request) (int, interface{}, error) {
+	ctx := r.Context()
+
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
@@ -44,7 +47,7 @@ func (a *Article) Show(w http.ResponseWriter, r *http.Request) (int, interface{}
 		return http.StatusBadRequest, nil, err
 	}
 
-	article, err := repository.FindArticle(a.db, aid)
+	article, err := a.articleService.Get(ctx, aid)
 	if err != nil && err == sql.ErrNoRows {
 		return http.StatusNotFound, nil, err
 	} else if err != nil {
@@ -55,13 +58,13 @@ func (a *Article) Show(w http.ResponseWriter, r *http.Request) (int, interface{}
 }
 
 func (a *Article) Create(w http.ResponseWriter, r *http.Request) (int, interface{}, error) {
+	ctx := r.Context()
 	newArticle := &model.Article{}
 	if err := json.NewDecoder(r.Body).Decode(&newArticle); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
-	articleService := service.NewArticle(a.db)
-	id, err := articleService.Create(newArticle)
+	id, err := a.articleService.Create(ctx, newArticle)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -71,6 +74,8 @@ func (a *Article) Create(w http.ResponseWriter, r *http.Request) (int, interface
 }
 
 func (a *Article) Update(w http.ResponseWriter, r *http.Request) (int, interface{}, error) {
+	ctx := r.Context()
+
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
@@ -87,8 +92,7 @@ func (a *Article) Update(w http.ResponseWriter, r *http.Request) (int, interface
 		return http.StatusBadRequest, nil, err
 	}
 
-	articleService := service.NewArticle(a.db)
-	err = articleService.Update(aid, reqArticle)
+	err = a.articleService.Update(ctx, aid, reqArticle)
 	if err != nil && errors.Cause(err) == sql.ErrNoRows {
 		return http.StatusNotFound, nil, err
 	} else if err != nil {
@@ -99,6 +103,8 @@ func (a *Article) Update(w http.ResponseWriter, r *http.Request) (int, interface
 }
 
 func (a *Article) Destroy(w http.ResponseWriter, r *http.Request) (int, interface{}, error) {
+	ctx := r.Context()
+
 	vars := mux.Vars(r)
 	id, ok := vars["id"]
 	if !ok {
@@ -110,8 +116,7 @@ func (a *Article) Destroy(w http.ResponseWriter, r *http.Request) (int, interfac
 		return http.StatusBadRequest, nil, err
 	}
 
-	articleService := service.NewArticle(a.db)
-	err = articleService.Destroy(aid)
+	err = a.articleService.Destroy(ctx, aid)
 	if err != nil && errors.Cause(err) == sql.ErrNoRows {
 		return http.StatusNotFound, nil, err
 	} else if err != nil {

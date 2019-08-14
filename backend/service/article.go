@@ -1,36 +1,47 @@
 package service
 
 import (
-	"github.com/jmoiron/sqlx"
-	"github.com/pkg/errors"
-	"github.com/voyagegroup/treasure-app/dbutil"
+	"context"
 
+	"github.com/pkg/errors"
 	"github.com/voyagegroup/treasure-app/model"
 	"github.com/voyagegroup/treasure-app/repository"
 )
 
-type Article struct {
-	db *sqlx.DB
+type Article interface {
+	GetAll(ctx context.Context) ([]*model.Article, error)
+	Get(ctx context.Context, id int64) (*model.Article, error)
+	Update(ctx context.Context, id int64, newArticle *model.Article) error
+	Destroy(ctx context.Context, id int64) error
+	Create(ctx context.Context, newArticle *model.Article) (int64, error)
 }
 
-func NewArticle(db *sqlx.DB) *Article {
-	return &Article{db}
+type article struct {
+	articleRepo repository.Article
 }
 
-func (a *Article) Update(id int64, newArticle *model.Article) error {
-	_, err := repository.FindArticle(a.db, id)
+func NewArticle(ar repository.Article) Article {
+	return &article{
+		articleRepo: ar,
+	}
+}
+
+func (a *article) GetAll(ctx context.Context) ([]*model.Article, error) {
+	return a.articleRepo.AllArticle(ctx)
+}
+
+func (a *article) Get(ctx context.Context, id int64) (*model.Article, error) {
+	return a.articleRepo.FindArticle(ctx, id)
+}
+
+func (a *article) Update(ctx context.Context, id int64, newArticle *model.Article) error {
+	_, err := a.articleRepo.FindArticle(ctx, id)
 	if err != nil {
 		return errors.Wrap(err, "failed find article")
 	}
 
-	if err := dbutil.TXHandler(a.db, func(tx *sqlx.Tx) error {
-		_, err := repository.UpdateArticle(tx, id, newArticle)
-		if err != nil {
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
+	if err := a.articleRepo.TxHandler(ctx, func(ctx context.Context) error {
+		_, err := a.articleRepo.UpdateArticle(ctx, id, newArticle)
 		return err
 	}); err != nil {
 		return errors.Wrap(err, "failed article update transaction")
@@ -38,20 +49,14 @@ func (a *Article) Update(id int64, newArticle *model.Article) error {
 	return nil
 }
 
-func (a *Article) Destroy(id int64) error {
-	_, err := repository.FindArticle(a.db, id)
+func (a *article) Destroy(ctx context.Context, id int64) error {
+	_, err := a.articleRepo.FindArticle(ctx, id)
 	if err != nil {
 		return errors.Wrap(err, "failed find article")
 	}
 
-	if err := dbutil.TXHandler(a.db, func(tx *sqlx.Tx) error {
-		_, err := repository.DestroyArticle(tx, id)
-		if err != nil {
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
+	if err := a.articleRepo.TxHandler(ctx, func(ctx context.Context) error {
+		_, err := a.articleRepo.DestroyArticle(ctx, id)
 		return err
 	}); err != nil {
 		return errors.Wrap(err, "failed article delete transaction")
@@ -59,17 +64,10 @@ func (a *Article) Destroy(id int64) error {
 	return nil
 }
 
-func (a *Article) Create(newArticle *model.Article) (int64, error) {
+func (a *article) Create(ctx context.Context, newArticle *model.Article) (int64, error) {
 	var createdId int64
-	if err := dbutil.TXHandler(a.db, func(tx *sqlx.Tx) error {
-		result, err := repository.CreateArticle(tx, newArticle)
-		if err != nil {
-			return err
-		}
-		if err := tx.Commit(); err != nil {
-			return err
-		}
-		id, err := result.LastInsertId()
+	if err := a.articleRepo.TxHandler(ctx, func(ctx context.Context) error {
+		id, err := a.articleRepo.CreateArticle(ctx, newArticle)
 		if err != nil {
 			return err
 		}
