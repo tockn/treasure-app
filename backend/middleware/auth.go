@@ -37,13 +37,13 @@ func (auth *Auth) Handler(next http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		token, err := auth.authService.VerifyIDToken(r.Context(), idToken)
+		token, err := auth.authService.VerifyIDToken(ctx, idToken)
 		if err != nil {
 			log.Print(err.Error())
 			http.Error(w, "Failed to verify token", http.StatusForbidden)
 			return
 		}
-		userRecord, err := auth.authService.GetUser(r.Context(), token.UID)
+		userRecord, err := auth.authService.GetUser(ctx, token.UID)
 
 		if err != nil {
 			log.Print(err.Error())
@@ -66,7 +66,7 @@ func (auth *Auth) Handler(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx = httputil.SetUserToContext(r.Context(), user)
+		ctx = httputil.SetUserToContext(ctx, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
