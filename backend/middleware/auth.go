@@ -5,11 +5,11 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/voyagegroup/treasure-app/service"
+
 	"firebase.google.com/go/auth"
-	"github.com/jmoiron/sqlx"
 	"github.com/voyagegroup/treasure-app/httputil"
 	"github.com/voyagegroup/treasure-app/model"
-	"github.com/voyagegroup/treasure-app/repository"
 )
 
 const (
@@ -17,31 +17,33 @@ const (
 )
 
 type Auth struct {
-	client *auth.Client
-	db     *sqlx.DB
+	authService service.Auth
+	userService service.User
 }
 
-func NewAuth(client *auth.Client, db *sqlx.DB) *Auth {
+func NewAuth(as service.Auth, us service.User) *Auth {
 	return &Auth{
-		client: client,
-		db:     db,
+		authService: as,
+		userService: us,
 	}
 }
 
 func (auth *Auth) Handler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+
 		idToken, err := getTokenFromHeader(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		token, err := auth.client.VerifyIDToken(r.Context(), idToken)
+		token, err := auth.authService.VerifyIDToken(r.Context(), idToken)
 		if err != nil {
 			log.Print(err.Error())
 			http.Error(w, "Failed to verify token", http.StatusForbidden)
 			return
 		}
-		userRecord, err := auth.client.GetUser(r.Context(), token.UID)
+		userRecord, err := auth.authService.GetUser(r.Context(), token.UID)
 
 		if err != nil {
 			log.Print(err.Error())
@@ -50,21 +52,21 @@ func (auth *Auth) Handler(next http.Handler) http.Handler {
 		}
 
 		firebaseUser := toFirebaseUser(userRecord)
-		_, syncErr := repository.SyncUser(auth.db, &firebaseUser)
+		_, syncErr := auth.userService.Sync(ctx, &firebaseUser)
 		if syncErr != nil {
 			log.Print(syncErr.Error())
 			http.Error(w, "Failed to sync user", http.StatusInternalServerError)
 			return
 		}
 
-		user, err := repository.GetUser(auth.db, firebaseUser.FirebaseUID)
+		user, err := auth.userService.Get(ctx, firebaseUser.FirebaseUID)
 		if err != nil {
 			log.Print(err.Error())
 			http.Error(w, "Failed to get user", http.StatusInternalServerError)
 			return
 		}
 
-		ctx := httputil.SetUserToContext(r.Context(), user)
+		ctx = httputil.SetUserToContext(r.Context(), user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

@@ -3,6 +3,9 @@ package server
 import (
 	"fmt"
 
+	"github.com/voyagegroup/treasure-app/repository/rdb"
+	"github.com/voyagegroup/treasure-app/service"
+
 	"github.com/voyagegroup/treasure-app/sample"
 
 	"log"
@@ -60,7 +63,12 @@ func (s *Server) Run(addr string) {
 }
 
 func (s *Server) Route() *mux.Router {
-	authMiddleware := middleware.NewAuth(s.authClient, s.db)
+	authMiddleware := middleware.NewAuth(
+		s.authClient,
+		service.NewUser(
+			rdb.NewUser(s.db),
+		),
+	)
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
 		AllowedHeaders: []string{"Authorization"},
@@ -77,9 +85,22 @@ func (s *Server) Route() *mux.Router {
 
 	r := mux.NewRouter()
 	r.Methods(http.MethodGet).Path("/public").Handler(commonChain.Then(sample.NewPublicHandler()))
-	r.Methods(http.MethodGet).Path("/private").Handler(authChain.Then(sample.NewPrivateHandler(s.db)))
+	r.Methods(http.MethodGet).Path("/private").Handler(
+		authChain.Then(
+			sample.NewPrivateHandler(
+				service.NewUser(
+					rdb.NewUser(s.db),
+				),
+			),
+		),
+	)
 
-	articleController := controller.NewArticle(s.db)
+	articleController := controller.NewArticle(
+		service.NewArticle(
+			rdb.NewArticle(s.db),
+		),
+	)
+
 	r.Methods(http.MethodPost).Path("/articles").Handler(authChain.Then(AppHandler{articleController.Create}))
 	r.Methods(http.MethodPut).Path("/articles/{id}").Handler(authChain.Then(AppHandler{articleController.Update}))
 	r.Methods(http.MethodDelete).Path("/articles/{id}").Handler(authChain.Then(AppHandler{articleController.Destroy}))

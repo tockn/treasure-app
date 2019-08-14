@@ -5,30 +5,30 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/voyagegroup/treasure-app/httputil"
-	"github.com/voyagegroup/treasure-app/repository"
+	"github.com/voyagegroup/treasure-app/service"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/voyagegroup/treasure-app/httputil"
 )
 
 type PrivateHandler struct {
-	db *sqlx.DB
+	userService service.User
 }
 
-func NewPrivateHandler(db *sqlx.DB) *PrivateHandler {
+func NewPrivateHandler(us service.User) *PrivateHandler {
 	return &PrivateHandler{
-		db: db,
+		userService: us,
 	}
 }
 
 func (h *PrivateHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	contextUser, err := httputil.GetUserFromContext(r.Context())
+	ctx := r.Context()
+	contextUser, err := httputil.GetUserFromContext(ctx)
 	if err != nil {
 		log.Print(err)
 		WriteJSON(nil, w, http.StatusInternalServerError)
 		return
 	}
-	user, err := repository.GetUser(h.db, contextUser.FirebaseUID)
+	user, err := h.userService.Get(ctx, contextUser.FirebaseUID)
 	if err != nil {
 		log.Printf("Show user failed: %s", err)
 		WriteJSON(nil, w, http.StatusInternalServerError)
